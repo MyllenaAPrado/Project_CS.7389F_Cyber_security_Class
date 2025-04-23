@@ -40,7 +40,7 @@ for v_id, val in enumerate(vals):
     model = get_model(opt)
     state_dict = torch.load(opt.model_path, map_location='cpu')
 
-    
+
     try:
         if opt.detect_method in ["FreDect","Gram"]:
             try:
@@ -53,7 +53,7 @@ for v_id, val in enumerate(vals):
             model.load_state_dict(state_dict['model'],strict=True)
     except:
         print("[ERROR] model.load_state_dict() error")
-    model.cuda()
+    model.to('cuda:1')
     model.eval()
 
 

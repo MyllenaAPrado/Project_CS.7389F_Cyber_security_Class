@@ -1,3 +1,4 @@
+import csv
 import torch
 import numpy as np
 from networks.resnet import resnet50
@@ -15,9 +16,10 @@ from PIL import Image
 
 
 
-        
-        
+
+
 def validate_PSM(model, data_loader):
+    print("Validate_PSM")
     y_true, y_pred = [], []
     i = 0
     with torch.no_grad():
@@ -25,9 +27,9 @@ def validate_PSM(model, data_loader):
             i += 1
             print("batch number {}/{}".format(i, len(data_loader)), end='\r')
             input_img = data[0]  # [batch_size, 3, height, width]
-            cropped_img = data[1].cuda()  # [batch_size, 3, 224, 224]
-            label = data[2].cuda()  # [batch_size, 1]
-            scale = data[3].cuda()  # [batch_size, 1, 2]
+            cropped_img = data[1].to('cuda:1')  # [batch_size, 3, 224, 224]
+            label = data[2].to('cuda:1')  # [batch_size, 1]
+            scale = data[3].to('cuda:1')  # [batch_size, 1, 2]
             logits = model(input_img, cropped_img, scale)
             y_pred.extend(logits.sigmoid().flatten().tolist())
             y_true.extend(label.flatten().tolist())
@@ -35,8 +37,9 @@ def validate_PSM(model, data_loader):
 
 
 def validate_single(model, opt):
+    print("Validate_single")
     opt=get_processing_model(opt)
-    real_img_list = loadpathslist(opt.dataroot,'0_real')        
+    real_img_list = loadpathslist(opt.dataroot,'0_real')
     real_label_list = [0 for _ in range(len(real_img_list))]
     fake_img_list = loadpathslist(opt.dataroot,'1_fake')
     fake_label_list = [1 for _ in range(len(fake_img_list))]
@@ -55,8 +58,8 @@ def validate_single(model, opt):
             img = custom_augment(img, opt)
             img,target=process_img(img,opt,imgs[idx],labels[idx])
             in_tens = img.unsqueeze(0)
-            in_tens = in_tens.cuda()
-            # label = label.cuda()
+            in_tens = in_tens.to('cuda:1')
+            # label = label.to('cuda:1')
             y_pred.extend(model(in_tens).sigmoid().flatten().tolist())
             y_true.extend([labels[idx]])
 
@@ -69,9 +72,10 @@ def validate_single(model, opt):
 
 
 def validate(model, opt):
-    
+    print("Validate")
+
     opt = get_processing_model(opt)
-    
+
     data_loader = create_dataloader_new(opt)
     y_true, y_pred = [], []
     if opt.detect_method == "Fusing":
@@ -79,13 +83,24 @@ def validate(model, opt):
     else:
         # with torch.no_grad():
         i = 0
-        for img, label in data_loader:
-            i += 1
-            print("batch number {}/{}".format(i, len(data_loader)), end='\r')
-            in_tens = img.cuda()
-            # label = label.cuda()
-            y_pred.extend(model(in_tens).sigmoid().flatten().tolist())
-            y_true.extend(label.flatten().tolist())
+        with open('output.csv', mode='w', newline='') as file:
+            writer = csv.writer(file)
+            
+            # Write the header (optional)
+            writer.writerow(['Name', 'Label', 'y_pred'])
+
+            for img, label, name in data_loader:
+                i += 1
+                print("batch number {}/{}".format(i, len(data_loader)), end='\r')
+                in_tens = img.to('cuda:1')
+                # label = label.to('cuda:1')
+                y_pred.extend(model(in_tens).sigmoid().flatten().tolist())
+                y_true.extend(label.flatten().tolist())
+                y_pred_class = [1 if prob > 0.5 else 0 for prob in y_pred]
+
+                for n, l, p in zip(name, label, y_pred_class):
+                    writer.writerow([n, l.item(), p])
+
 
     y_true, y_pred = np.array(y_true), np.array(y_pred)
     r_acc = accuracy_score(y_true[y_true == 0], y_pred[y_true == 0] > 0.5)
@@ -101,7 +116,7 @@ if __name__ == '__main__':
     model = resnet50(num_classes=1)
     state_dict = torch.load(opt.model_path, map_location='cpu')
     model.load_state_dict(state_dict['model'])
-    model.cuda()
+    model.to('cuda:1')
     model.eval()
 
     acc, avg_precision, r_acc, f_acc, y_true, y_pred = validate(model, opt)

@@ -75,51 +75,51 @@ if __name__ == "__main__":
     # Infer setting
     prompt = "analog film photo. faded film, desaturated, 35mm photo, grainy, vignette, vintage, Kodachrome, Lomography, stained, highly detailed, found footage, masterpiece, best quality"
     n_prompt = "(lowres, low quality, worst quality:1.2), (text:1.2), watermark, painting, drawing, illustration, glitch, deformed, mutated, cross-eyed, ugly, disfigured (lowres, low quality, worst quality:1.2), (text:1.2), watermark, painting, drawing, illustration, glitch,deformed, mutated, cross-eyed, ugly, disfigured"
+    for pose in os.listdir('./examples/poses'):
+        for img in os.listdir('real_dataset'):
+            try:
+                face_image = load_image(f"real_dataset/{img}")
+                face_image = resize_img(face_image)
 
-    for img in os.listdir('real_dataset'):
-        try: 
-            face_image = load_image(f"real_dataset/{img}")
-            face_image = resize_img(face_image)
+                face_info = app.get(cv2.cvtColor(np.array(face_image), cv2.COLOR_RGB2BGR))
+                face_info = sorted(face_info, key=lambda x:(x['bbox'][2]-x['bbox'][0])*(x['bbox'][3]-x['bbox'][1]))[-1] # only use the maximum face
+                face_emb = face_info['embedding']
 
-            face_info = app.get(cv2.cvtColor(np.array(face_image), cv2.COLOR_RGB2BGR))
-            face_info = sorted(face_info, key=lambda x:(x['bbox'][2]-x['bbox'][0])*(x['bbox'][3]-x['bbox'][1]))[-1] # only use the maximum face
-            face_emb = face_info['embedding']
+                # use another reference image
+                pose_image = load_image("./examples/poses/{pose}")
+                pose_image = resize_img(pose_image)
 
-            # use another reference image
-            pose_image = load_image("./examples/poses/pose.jpg")
-            pose_image = resize_img(pose_image)
+                face_info = app.get(cv2.cvtColor(np.array(pose_image), cv2.COLOR_RGB2BGR))
+                pose_image_cv2 = convert_from_image_to_cv2(pose_image)
+                face_info = sorted(face_info, key=lambda x:(x['bbox'][2]-x['bbox'][0])*(x['bbox'][3]-x['bbox'][1]))[-1] # only use the maximum face
+                face_kps = draw_kps(pose_image, face_info['kps'])
 
-            face_info = app.get(cv2.cvtColor(np.array(pose_image), cv2.COLOR_RGB2BGR))
-            pose_image_cv2 = convert_from_image_to_cv2(pose_image)
-            face_info = sorted(face_info, key=lambda x:(x['bbox'][2]-x['bbox'][0])*(x['bbox'][3]-x['bbox'][1]))[-1] # only use the maximum face
-            face_kps = draw_kps(pose_image, face_info['kps'])
+                width, height = face_kps.size
 
-            width, height = face_kps.size
+                # use depth control
+                processed_image_midas = midas(pose_image)
+                processed_image_midas = processed_image_midas.resize(pose_image.size)
 
-            # use depth control
-            processed_image_midas = midas(pose_image)
-            processed_image_midas = processed_image_midas.resize(pose_image.size)
+                # enhance face region
+                control_mask = np.zeros([height, width, 3])
+                x1, y1, x2, y2 = face_info["bbox"]
+                x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
+                control_mask[y1:y2, x1:x2] = 255
+                control_mask = Image.fromarray(control_mask.astype(np.uint8))
 
-            # enhance face region
-            control_mask = np.zeros([height, width, 3])
-            x1, y1, x2, y2 = face_info["bbox"]
-            x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
-            control_mask[y1:y2, x1:x2] = 255
-            control_mask = Image.fromarray(control_mask.astype(np.uint8))
-
-            image = pipe(
-                prompt=prompt,
-                negative_prompt=n_prompt,
-                image_embeds=face_emb,
-                control_mask=control_mask,
-                image=[face_kps, processed_image_midas],
-                controlnet_conditioning_scale=[0.8,0.8],
-                ip_adapter_scale=0.8,
-                num_inference_steps=30,
-                guidance_scale=5,
-            ).images[0]
-
-            image.save(f'fake_dataset/{img}')
-            #face_image.save(f"real/{img}")
-        except:
-            print("Error img: ", img)
+                image = pipe(
+                    prompt=prompt,
+                    negative_prompt=n_prompt,
+                    image_embeds=face_emb,
+                    control_mask=control_mask,
+                    image=[face_kps, processed_image_midas],
+                    controlnet_conditioning_scale=[0.8,0.8],
+                    ip_adapter_scale=0.8,
+                    num_inference_steps=30,
+                    guidance_scale=5,
+                ).images[0]
+                name_pose = pose.split('.')[0]
+                image.save(f'fake_dataset/{name_pose}_{img}')
+                #face_image.save(f"real/{img}")
+            except:
+                print("Error img: ", img)

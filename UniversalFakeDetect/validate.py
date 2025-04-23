@@ -10,7 +10,7 @@ from sklearn.metrics import average_precision_score, precision_recall_curve, acc
 from torch.utils.data import Dataset
 import sys
 from models import get_model
-from PIL import Image 
+from PIL import Image
 import pickle
 from tqdm import tqdm
 from io import BytesIO
@@ -19,6 +19,7 @@ from dataset_paths import DATASET_PATHS
 import random
 import shutil
 from scipy.ndimage.filters import gaussian_filter
+import csv
 
 SEED = 0
 def set_seed():
@@ -48,24 +49,24 @@ def find_best_threshold(y_true, y_pred):
     N = y_true.shape[0]
 
     if y_pred[0:N//2].max() <= y_pred[N//2:N].min(): # perfectly separable case
-        return (y_pred[0:N//2].max() + y_pred[N//2:N].min()) / 2 
+        return (y_pred[0:N//2].max() + y_pred[N//2:N].min()) / 2
 
-    best_acc = 0 
-    best_thres = 0 
+    best_acc = 0
+    best_thres = 0
     for thres in y_pred:
         temp = deepcopy(y_pred)
-        temp[temp>=thres] = 1 
-        temp[temp<thres] = 0 
+        temp[temp>=thres] = 1
+        temp[temp<thres] = 0
 
-        acc = (temp == y_true).sum() / N  
+        acc = (temp == y_true).sum() / N
         if acc >= best_acc:
             best_thres = thres
-            best_acc = acc 
-    
-    return best_thres
-        
+            best_acc = acc
 
- 
+    return best_thres
+
+
+
 def png2jpg(img, quality):
     out = BytesIO()
     img.save(out, format='jpeg', quality=quality) # ranging from 0-95, 75 is default
@@ -91,28 +92,38 @@ def calculate_acc(y_true, y_pred, thres):
     r_acc = accuracy_score(y_true[y_true==0], y_pred[y_true==0] > thres)
     f_acc = accuracy_score(y_true[y_true==1], y_pred[y_true==1] > thres)
     acc = accuracy_score(y_true, y_pred > thres)
-    return r_acc, f_acc, acc    
+    return r_acc, f_acc, acc
 
 
 def validate(model, loader, find_thres=False):
 
     with torch.no_grad():
         y_true, y_pred = [], []
-        print ("Length of dataset: %d" %(len(loader)))
-        for img, label in loader:
-            in_tens = img.cuda()
+        with open('output.csv', mode='w', newline='') as file:
+            writer = csv.writer(file)
+            
+            # Write the header (optional)
+            writer.writerow(['Name', 'Label', 'y_pred'])
 
-            y_pred.extend(model(in_tens).sigmoid().flatten().tolist())
-            y_true.extend(label.flatten().tolist())
+            print ("Length of dataset: %d" %(len(loader)))
+            for img, label, name in loader:
+                in_tens = img.to('cuda:1')
+
+                y_pred.extend(model(in_tens).sigmoid().flatten().tolist())
+                y_true.extend(label.flatten().tolist())
+                y_pred_class = [1 if prob > 0.5 else 0 for prob in y_pred]
+
+                for n, l, p in zip(name, label, y_pred_class):
+                    writer.writerow([n, l.item(), p])
 
     y_true, y_pred = np.array(y_true), np.array(y_pred)
 
-    # ================== save this if you want to plot the curves =========== # 
+    # ================== save this if you want to plot the curves =========== #
     # torch.save( torch.stack( [torch.tensor(y_true), torch.tensor(y_pred)] ),  'baseline_predication_for_pr_roc_curve.pth' )
     # exit()
     # =================================================================== #
-    
-    # Get AP 
+
+    # Get AP
     ap = average_precision_score(y_true, y_pred)
 
     # Acc based on 0.5
@@ -127,18 +138,18 @@ def validate(model, loader, find_thres=False):
 
     return ap, r_acc0, f_acc0, acc0, r_acc1, f_acc1, acc1, best_thres
 
-    
-    
 
 
 
-# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = # 
+
+
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = #
 
 
 
 
 def recursively_read(rootdir, must_contain, exts=["png", "jpg", "JPEG", "jpeg", "bmp"]):
-    out = [] 
+    out = []
     for r, d, f in os.walk(rootdir):
         for file in f:
             if (file.split('.')[1] in exts)  and  (must_contain in os.path.join(r, file)):
@@ -160,9 +171,9 @@ def get_list(path, must_contain=''):
 
 
 class RealFakeDataset(Dataset):
-    def __init__(self,  real_path, 
-                        fake_path, 
-                        data_mode, 
+    def __init__(self,  real_path,
+                        fake_path,
+                        data_mode,
                         max_sample,
                         arch,
                         jpeg_quality=None,
@@ -171,8 +182,8 @@ class RealFakeDataset(Dataset):
         assert data_mode in ["wang2020", "ours"]
         self.jpeg_quality = jpeg_quality
         self.gaussian_sigma = gaussian_sigma
-        
-        # = = = = = = data path = = = = = = = = = # 
+
+        # = = = = = = data path = = = = = = = = = #
         if type(real_path) == str and type(fake_path) == str:
             real_list, fake_list = self.read_path(real_path, fake_path, data_mode, max_sample)
         else:
@@ -186,7 +197,7 @@ class RealFakeDataset(Dataset):
         self.total_list = real_list + fake_list
 
 
-        # = = = = = =  label = = = = = = = = = # 
+        # = = = = = =  label = = = = = = = = = #
 
         self.labels_dict = {}
         for i in real_list:
@@ -221,7 +232,7 @@ class RealFakeDataset(Dataset):
             real_list = real_list[0:max_sample]
             fake_list = fake_list[0:max_sample]
 
-        assert len(real_list) == len(fake_list)  
+        assert len(real_list) == len(fake_list)
 
         return real_list, fake_list
 
@@ -231,19 +242,19 @@ class RealFakeDataset(Dataset):
         return len(self.total_list)
 
     def __getitem__(self, idx):
-        
+
         img_path = self.total_list[idx]
 
         label = self.labels_dict[img_path]
         img = Image.open(img_path).convert("RGB")
 
         if self.gaussian_sigma is not None:
-            img = gaussian_blur(img, self.gaussian_sigma) 
+            img = gaussian_blur(img, self.gaussian_sigma)
         if self.jpeg_quality is not None:
             img = png2jpg(img, self.jpeg_quality)
 
         img = self.transform(img)
-        return img, label
+        return img, label, img_path
 
 
 
@@ -270,7 +281,7 @@ if __name__ == '__main__':
 
     opt = parser.parse_args()
 
-    
+
     if os.path.exists(opt.result_folder):
         shutil.rmtree(opt.result_folder)
     os.makedirs(opt.result_folder)
@@ -280,7 +291,7 @@ if __name__ == '__main__':
     model.fc.load_state_dict(state_dict)
     print ("Model loaded..")
     model.eval()
-    model.cuda()
+    model.to('cuda:1')
 
     if (opt.real_path == None) or (opt.fake_path == None) or (opt.data_mode == None):
         dataset_paths = DATASET_PATHS
@@ -292,12 +303,12 @@ if __name__ == '__main__':
     for dataset_path in (dataset_paths):
         set_seed()
 
-        dataset = RealFakeDataset(  dataset_path['real_path'], 
-                                    dataset_path['fake_path'], 
-                                    dataset_path['data_mode'], 
-                                    opt.max_sample, 
+        dataset = RealFakeDataset(  dataset_path['real_path'],
+                                    dataset_path['fake_path'],
+                                    dataset_path['data_mode'],
+                                    opt.max_sample,
                                     opt.arch,
-                                    jpeg_quality=opt.jpeg_quality, 
+                                    jpeg_quality=opt.jpeg_quality,
                                     gaussian_sigma=opt.gaussian_sigma,
                                     )
 
@@ -311,4 +322,3 @@ if __name__ == '__main__':
         with open( os.path.join(opt.result_folder,'acc0.txt'), 'a') as f:
             f.write('InstantID: ' + str(round(r_acc0*100, 2))+'  '+str(round(f_acc0*100, 2))+'  '+str(round(acc0*100, 2))+'\n' )
             print('InstantID: ' + str(round(r_acc0*100, 2))+'  '+str(round(f_acc0*100, 2))+'  '+str(round(acc0*100, 2))+'\n' )
-

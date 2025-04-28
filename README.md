@@ -37,3 +37,46 @@ The  code was ran using the command:
 The results of model is available on file results_analyses.ipynb
 
 
+# References:
+
+LPFF-dataset
+```bibtex
+@InProceedings{Wu_2023_ICCV,
+    author    = {Wu, Yiqian and Zhang, Jing and Fu, Hongbo and Jin, Xiaogang},
+    title     = {LPFF: A Portrait Dataset for Face Generators Across Large Poses},
+    booktitle = {Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV)},
+    month     = {October},
+    year      = {2023},
+    pages     = {20327-20337}
+}
+```
+
+InstantID
+```bibtex
+@article{wang2024instantid,
+title={InstantID: Zero-shot Identity-Preserving Generation in Seconds},
+author={Wang, Qixun and Bai, Xu and Wang, Haofan and Qin, Zekui and Chen, Anthony},
+journal={arXiv preprint arXiv:2401.07519},
+year={2024}
+}
+```
+
+AIGCDetectBenchmark
+```bibtex
+@article{zhong2023patchcraft,
+title={Patchcraft: Exploring texture patch for efficient ai-generated image detection},
+author={Zhong, Nan and Xu, Yiran and Li, Sheng and Qian, Zhenxing and Zhang, Xinpeng},
+journal={arXiv preprint arXiv:2311.12397},
+year={2023}
+}
+```
+
+UniversalFakeDetect
+```bibtex
+@article{wang2023dire,
+title={DIRE for Diffusion-Generated Image Detection},
+author={Wang, Zhendong and Bao, Jianmin and Zhou, Wengang and Wang, Weilun and Hu, Hezhen and Chen, Hong and Li, Houqiang},
+journal={arXiv preprint arXiv:2303.09295},
+year={2023}
+}
+```
